@@ -28,10 +28,19 @@
   "readme": "",
   "readmeFilename": "README.md",
   "dependencies": {
-    "passport-oauth": "~1.0.0"
+    "@types/nconf": "0.0.37",
+    "passport-oauth2": "^1.4.0"
   },
   "nbbpm": {
     "compatibility": "^1.0.1",
     "index": false
+  },
+  "devDependencies": {
+    "@types/node": "^10.0.4",
+    "@types/passport-oauth2": "^1.4.4",
+    "ts-node": "^6.0.3",
+    "tslint": "^5.10.0",
+    "tslint-microsoft-contrib": "^5.0.3",
+    "typescript": "^2.8.3"
   }
 }
