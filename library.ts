@@ -1,41 +1,153 @@
+/**
+ *
+ */
+
+// tslint:disable-next-line:no-implicit-dependencies
+import { Request } from 'express';
 // tslint:disable-next-line:no-implicit-dependencies
 import * as n from 'nconf';
+// tslint:disable-next-line:no-implicit-dependencies
+import * as p from 'passport';
+import { InternalOAuthError, Strategy, StrategyOptionsWithRequest } from 'passport-oauth2';
+import { callbackify, promisify } from 'util';
 
 if (!module.parent) { throw new Error('Must use as a plugin.'); }
 
+// tslint:disable-next-line:variable-name
+const User = module.parent.require('./user');
 const nconf: typeof n = module.parent.require('nconf');
-// const clientID: string = nconf.get('oauth2:id');
-/**
- * OAuth Plugin
- */
-class OAuth {
+const passport: typeof p = module.parent.require('pasport');
+const db = module.parent.require('../src/database');
+const authenticationCtrl = module.parent.require('./controllers/authentication');
+const winston = module.parent.require('winston');
 
-    private readonly constants: Constants = Object.freeze({
-        type: '',
-        name: '',
-        oauth2: Object.freeze({
-            authorizationURL: '',
-            tokenURL: '',
-            clientID: nconf.get('oauth2:id'),
-            clientSecret: nconf.get('oauth2:secret'),
-        }),
-        userRoute: '',
-    });
+const constants: Constants = Object.freeze({
+    type: '',
+    name: '',
+    oauth2: Object.freeze({
+        authorizationURL: '',
+        tokenURL: '',
+        clientID: nconf.get('oauth2:id'),
+        clientSecret: nconf.get('oauth2:secret'),
+    }),
+    userRoute: '',
+});
 
-    public async getStrategy(strategies: IStrategy[]): Promise<IStrategy[]> {
-        const passportOAuth = await import('passport-oauth2');
-        passportOAuth.Strategy.prototype.userProfile = function () {
-            // this._oauth.get();
-        }
-        return [];
+function parseUser(data: IData): IProfile {
+    const profile: IProfile = {
+        id: data.value.id,
+        displayName: data.value.username,
+        emails: [],
+    };
+
+    if (data.value.email) {
+        profile.emails.push({ value: data.value.email });
     }
 
-    public parseUserReturn(): void { return; }
-
-    public login(): void { return; }
-
-    public deleteUserData(): void { return; }
+    return profile;
 }
+
+class OAuth2Strategy extends Strategy {
+    public userProfile(accessToken: string, done: (err: Error | null, profile?: IProfile) => void): void {
+
+        // tslint:disable-next-line:typedef
+        this._oauth2.getProtectedResource(constants.userRoute, accessToken, (err, body, res) => {
+            if (err) { return done(new InternalOAuthError('failed to fetch user profile', err)); }
+
+            try {
+                const json: IData = JSON.parse(body.toString());
+
+                const profile = parseUser(json);
+
+                profile.provider = constants.name;
+
+                done(null, profile);
+            } catch (e) {
+                done(e);
+            }
+
+        });
+    }
+}
+
+async function verifyFunctionWithRequest(
+    req: Request,
+    toekn: string,
+    secret: string,
+    profile: IProfile,
+): Promise<{ uid: string }> {
+    const user = await login({
+        oAuthid: profile.id,
+        handle: profile.displayName,
+        email: profile.emails[0].value,
+        isAdmin: false,
+    });
+
+    authenticationCtrl.onSuccessfulLogin(req, user.uid);
+
+    return user;
+}
+
+async function login(payload: ILoginPayload): Promise<{ uid: string }> {
+    let uid: string | null = await getUidByOAuthid(payload.oAuthid);
+
+    if (!uid) {
+        uid = await promisify(User.create)({
+            username: payload.handle,
+            email: payload.email,
+        });
+
+        User.setUserField(uid, `${constants.name}Id`, payload.oAuthid);
+        db.setObjectField(`${constants.name}Id:uid`, payload.oAuthid, uid);
+    }
+
+    if (!uid) { throw new Error('User login failed.'); }
+
+    return { uid };
+}
+
+function getUidByOAuthid(oAuthid: string): Promise<string> {
+    return promisify(db.getUidByOAuthid)(`${constants.name}Id:uid`, oAuthid);
+}
+
+async function getStrategy(strategies: IStrategy[]): Promise<IStrategy[]> {
+    const passportOAuth = await import('passport-oauth2');
+    const opt: StrategyOptionsWithRequest = {
+        ...constants.oauth2,
+        callbackURL: `${nconf.get('url')}/auth/${constants.name}/callback`,
+        passReqToCallback: true,
+    };
+
+    passport.use(constants.name, new OAuth2Strategy(opt, callbackify(verifyFunctionWithRequest)));
+
+    strategies.push({
+        name: constants.name,
+        url: `/auth/${constants.name}`,
+        callbackURL: `/auth/${constants.name}/callback`,
+        icon: 'fa-check-square',
+        scope: [],
+    });
+
+    return strategies;
+}
+
+async function deleteUserData(user: { uid: string }): Promise<{ uid: string }> {
+
+    try {
+        const oAuthIdDelete = await promisify(User.getUserField)(user.uid, `${constants.name}Id`);
+        await promisify(db.deleteObjectField)(`${constants.name}Id:uid`, oAuthIdDelete);
+    } catch (err) {
+        winston.error(`[sso-oauth] Could not remove OAuthId data for uid ${user.uid}. Error: ${err}`);
+        throw err;
+    }
+
+    return user;
+}
+
+module.exports = {
+    getStrategy: callbackify(getStrategy),
+    deleteUserData: callbackify(deleteUserData),
+};
 
 interface IStrategy {
     name: string;
@@ -43,6 +155,28 @@ interface IStrategy {
     callbackURL: string;
     icon: string;
     scope: string[];
+}
+
+interface IData {
+    value: {
+        id: string;
+        email: string | null;
+        username: string;
+    };
+}
+
+interface ILoginPayload {
+    oAuthid: string;
+    handle: string;
+    email: string;
+    isAdmin: boolean;
+}
+
+interface IProfile {
+    id: string;
+    displayName: string;
+    emails: { value: string }[];
+    provider?: string;
 }
 
 type Constants = Readonly<{
