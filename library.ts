@@ -25,8 +25,8 @@ const constants: Constants = Object.freeze({
     type: 'oauth2',
     name: 'sheencity',
     oauth2: Object.freeze({
-        authorizationURL: '',
-        tokenURL: '',
+        authorizationURL: nconf.get('oauth2:authURL'),
+        tokenURL: nconf.get('oauth2:tokenURL'),
         clientID: nconf.get('oauth2:id'),
         clientSecret: nconf.get('oauth2:secret'),
     }),
