@@ -71,7 +71,7 @@ if (!module.parent) {
 // tslint:disable-next-line:variable-name
 var User = module.parent.require('./user');
 var nconf = module.parent.require('nconf');
-var passport = module.parent.require('pasport');
+var passport = module.parent.require('passport');
 var db = module.parent.require('../src/database');
 var authenticationCtrl = module.parent.require('./controllers/authentication');
 var winston = module.parent.require('winston');

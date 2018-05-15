@@ -16,7 +16,7 @@ if (!module.parent) { throw new Error('Must use as a plugin.'); }
 // tslint:disable-next-line:variable-name
 const User = module.parent.require('./user');
 const nconf: typeof n = module.parent.require('nconf');
-const passport: typeof p = module.parent.require('pasport');
+const passport: typeof p = module.parent.require('passport');
 const db = module.parent.require('../src/database');
 const authenticationCtrl = module.parent.require('./controllers/authentication');
 const winston = module.parent.require('winston');
