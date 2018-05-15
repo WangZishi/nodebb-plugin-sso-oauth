@@ -22,8 +22,8 @@ const authenticationCtrl = module.parent.require('./controllers/authentication')
 const winston = module.parent.require('winston');
 
 const constants: Constants = Object.freeze({
-    type: '',
-    name: '',
+    type: 'oauth2',
+    name: 'sheencity',
     oauth2: Object.freeze({
         authorizationURL: '',
         tokenURL: '',

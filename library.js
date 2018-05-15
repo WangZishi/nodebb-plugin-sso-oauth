@@ -1,268 +1,221 @@
-(function(module) {
-	"use strict";
-
-	/*
-		Welcome to the SSO OAuth plugin! If you're inspecting this code, you're probably looking to
-		hook up NodeBB with your existing OAuth endpoint.
-
-		Step 1: Fill in the "constants" section below with the requisite informaton. Either the "oauth"
-				or "oauth2" section needs to be filled, depending on what you set "type" to.
-
-		Step 2: Give it a whirl. If you see the congrats message, you're doing well so far!
-
-		Step 3: Customise the `parseUserReturn` method to normalise your user route's data return into
-				a format accepted by NodeBB. Instructions are provided there. (Line 146)
-
-		Step 4: If all goes well, you'll be able to login/register via your OAuth endpoint credentials.
-	*/
-
-	var User = module.parent.require('./user'),
-		Groups = module.parent.require('./groups'),
-		meta = module.parent.require('./meta'),
-		db = module.parent.require('../src/database'),
-		passport = module.parent.require('passport'),
-		fs = module.parent.require('fs'),
-		path = module.parent.require('path'),
-		nconf = module.parent.require('nconf'),
-		winston = module.parent.require('winston'),
-		async = module.parent.require('async');
-
-	var authenticationController = module.parent.require('./controllers/authentication');
-
-	/**
-	 * REMEMBER
-	 *   Never save your OAuth Key/Secret or OAuth2 ID/Secret pair in code! It could be published and leaked accidentally.
-	 *   Save it into your config.json file instead:
-	 *
-	 *   {
-	 *     ...
-	 *     "oauth": {
-	 *       "id": "someoauthid",
-	 *       "secret": "youroauthsecret"
-	 *     }
-	 *     ...
-	 *   }
-	 *
-	 *   ... or use environment variables instead:
-	 *
-	 *   `OAUTH__ID=someoauthid OAUTH__SECRET=youroauthsecret node app.js`
-	 */
-
-	var constants = Object.freeze({
-			type: '',	// Either 'oauth' or 'oauth2'
-			name: '',	// Something unique to your OAuth provider in lowercase, like "github", or "nodebb"
-			oauth: {
-				requestTokenURL: '',
-				accessTokenURL: '',
-				userAuthorizationURL: '',
-				consumerKey: nconf.get('oauth:key'),	// don't change this line
-				consumerSecret: nconf.get('oauth:secret'),	// don't change this line
-			},
-			oauth2: {
-				authorizationURL: '',
-				tokenURL: '',
-				clientID: nconf.get('oauth:id'),	// don't change this line
-				clientSecret: nconf.get('oauth:secret'),	// don't change this line
-			},
-			userRoute: ''	// This is the address to your app's "user profile" API endpoint (expects JSON)
-		}),
-		configOk = false,
-		OAuth = {}, passportOAuth, opts;
-
-	if (!constants.name) {
-		winston.error('[sso-oauth] Please specify a name for your OAuth provider (library.js:32)');
-	} else if (!constants.type || (constants.type !== 'oauth' && constants.type !== 'oauth2')) {
-		winston.error('[sso-oauth] Please specify an OAuth strategy to utilise (library.js:31)');
-	} else if (!constants.userRoute) {
-		winston.error('[sso-oauth] User Route required (library.js:31)');
-	} else {
-		configOk = true;
-	}
-
-	OAuth.getStrategy = function(strategies, callback) {
-		if (configOk) {
-			passportOAuth = require('passport-oauth')[constants.type === 'oauth' ? 'OAuthStrategy' : 'OAuth2Strategy'];
-
-			if (constants.type === 'oauth') {
-				// OAuth options
-				opts = constants.oauth;
-				opts.callbackURL = nconf.get('url') + '/auth/' + constants.name + '/callback';
-
-				passportOAuth.Strategy.prototype.userProfile = function(token, secret, params, done) {
-					this._oauth.get(constants.userRoute, token, secret, function(err, body, res) {
-						if (err) { return done(new InternalOAuthError('failed to fetch user profile', err)); }
-
-						try {
-							var json = JSON.parse(body);
-							OAuth.parseUserReturn(json, function(err, profile) {
-								if (err) return done(err);
-								profile.provider = constants.name;
-
-								done(null, profile);
-							});
-						} catch(e) {
-							done(e);
-						}
-					});
-				};
-			} else if (constants.type === 'oauth2') {
-				// OAuth 2 options
-				opts = constants.oauth2;
-				opts.callbackURL = nconf.get('url') + '/auth/' + constants.name + '/callback';
-
-				passportOAuth.Strategy.prototype.userProfile = function(accessToken, done) {
-					this._oauth2.get(constants.userRoute, accessToken, function(err, body, res) {
-						if (err) { return done(new InternalOAuthError('failed to fetch user profile', err)); }
-
-						try {
-							var json = JSON.parse(body);
-							OAuth.parseUserReturn(json, function(err, profile) {
-								if (err) return done(err);
-								profile.provider = constants.name;
-
-								done(null, profile);
-							});
-						} catch(e) {
-							done(e);
-						}
-					});
-				};
-			}
-
-			opts.passReqToCallback = true;
-
-			passport.use(constants.name, new passportOAuth(opts, function(req, token, secret, profile, done) {
-				OAuth.login({
-					oAuthid: profile.id,
-					handle: profile.displayName,
-					email: profile.emails[0].value,
-					isAdmin: profile.isAdmin
-				}, function(err, user) {
-					if (err) {
-						return done(err);
-					}
-
-					authenticationController.onSuccessfulLogin(req, user.uid);
-					done(null, user);
-				});
-			}));
-
-			strategies.push({
-				name: constants.name,
-				url: '/auth/' + constants.name,
-				callbackURL: '/auth/' + constants.name + '/callback',
-				icon: 'fa-check-square',
-				scope: (constants.scope || '').split(',')
-			});
-
-			callback(null, strategies);
-		} else {
-			callback(new Error('OAuth Configuration is invalid'));
-		}
-	};
-
-	OAuth.parseUserReturn = function(data, callback) {
-		// Alter this section to include whatever data is necessary
-		// NodeBB *requires* the following: id, displayName, emails.
-		// Everything else is optional.
-
-		// Find out what is available by uncommenting this line:
-		// console.log(data);
-
-		var profile = {};
-		profile.id = data.id;
-		profile.displayName = data.name;
-		profile.emails = [{ value: data.email }];
-
-		// Do you want to automatically make somebody an admin? This line might help you do that...
-		// profile.isAdmin = data.isAdmin ? true : false;
-
-		// Delete or comment out the next TWO (2) lines when you are ready to proceed
-		process.stdout.write('===\nAt this point, you\'ll need to customise the above section to id, displayName, and emails into the "profile" object.\n===');
-		return callback(new Error('Congrats! So far so good -- please see server log for details'));
-
-		callback(null, profile);
-	}
-
-	OAuth.login = function(payload, callback) {
-		OAuth.getUidByOAuthid(payload.oAuthid, function(err, uid) {
-			if(err) {
-				return callback(err);
-			}
-
-			if (uid !== null) {
-				// Existing User
-				callback(null, {
-					uid: uid
-				});
-			} else {
-				// New User
-				var success = function(uid) {
-					// Save provider-specific information to the user
-					User.setUserField(uid, constants.name + 'Id', payload.oAuthid);
-					db.setObjectField(constants.name + 'Id:uid', payload.oAuthid, uid);
-
-					if (payload.isAdmin) {
-						Groups.join('administrators', uid, function(err) {
-							callback(null, {
-								uid: uid
-							});
-						});
-					} else {
-						callback(null, {
-							uid: uid
-						});
-					}
-				};
-
-				User.getUidByEmail(payload.email, function(err, uid) {
-					if(err) {
-						return callback(err);
-					}
-
-					if (!uid) {
-						User.create({
-							username: payload.handle,
-							email: payload.email
-						}, function(err, uid) {
-							if(err) {
-								return callback(err);
-							}
-
-							success(uid);
-						});
-					} else {
-						success(uid); // Existing account -- merge
-					}
-				});
-			}
-		});
-	};
-
-	OAuth.getUidByOAuthid = function(oAuthid, callback) {
-		db.getObjectField(constants.name + 'Id:uid', oAuthid, function(err, uid) {
-			if (err) {
-				return callback(err);
-			}
-			callback(null, uid);
-		});
-	};
-
-	OAuth.deleteUserData = function(data, callback) {
-		async.waterfall([
-			async.apply(User.getUserField, data.uid, constants.name + 'Id'),
-			function(oAuthIdToDelete, next) {
-				db.deleteObjectField(constants.name + 'Id:uid', oAuthIdToDelete, next);
-			}
-		], function(err) {
-			if (err) {
-				winston.error('[sso-oauth] Could not remove OAuthId data for uid ' + data.uid + '. Error: ' + err);
-				return callback(err);
-			}
-
-			callback(null, data);
-		});
-	};
-
-	module.exports = OAuth;
-}(module));
+"use strict";
+/**
+ *
+ */
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __assign = (this && this.__assign) || Object.assign || function(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+        s = arguments[i];
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+            t[p] = s[p];
+    }
+    return t;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var passport_oauth2_1 = require("passport-oauth2");
+var util_1 = require("util");
+if (!module.parent) {
+    throw new Error('Must use as a plugin.');
+}
+// tslint:disable-next-line:variable-name
+var User = module.parent.require('./user');
+var nconf = module.parent.require('nconf');
+var passport = module.parent.require('pasport');
+var db = module.parent.require('../src/database');
+var authenticationCtrl = module.parent.require('./controllers/authentication');
+var winston = module.parent.require('winston');
+var constants = Object.freeze({
+    type: 'oauth2',
+    name: 'sheencity',
+    oauth2: Object.freeze({
+        authorizationURL: '',
+        tokenURL: '',
+        clientID: nconf.get('oauth2:id'),
+        clientSecret: nconf.get('oauth2:secret'),
+    }),
+    userRoute: '',
+});
+function parseUser(data) {
+    var profile = {
+        id: data.value.id,
+        displayName: data.value.username,
+        emails: [],
+    };
+    if (data.value.email) {
+        profile.emails.push({ value: data.value.email });
+    }
+    return profile;
+}
+var OAuth2Strategy = /** @class */ (function (_super) {
+    __extends(OAuth2Strategy, _super);
+    function OAuth2Strategy() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    OAuth2Strategy.prototype.userProfile = function (accessToken, done) {
+        // tslint:disable-next-line:typedef
+        this._oauth2.getProtectedResource(constants.userRoute, accessToken, function (err, body, res) {
+            if (err) {
+                return done(new passport_oauth2_1.InternalOAuthError('failed to fetch user profile', err));
+            }
+            try {
+                var json = JSON.parse(body.toString());
+                var profile = parseUser(json);
+                profile.provider = constants.name;
+                done(null, profile);
+            }
+            catch (e) {
+                done(e);
+            }
+        });
+    };
+    return OAuth2Strategy;
+}(passport_oauth2_1.Strategy));
+function verifyFunctionWithRequest(req, toekn, secret, profile) {
+    return __awaiter(this, void 0, void 0, function () {
+        var user;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, login({
+                        oAuthid: profile.id,
+                        handle: profile.displayName,
+                        email: profile.emails[0].value,
+                        isAdmin: false,
+                    })];
+                case 1:
+                    user = _a.sent();
+                    authenticationCtrl.onSuccessfulLogin(req, user.uid);
+                    return [2 /*return*/, user];
+            }
+        });
+    });
+}
+function login(payload) {
+    return __awaiter(this, void 0, void 0, function () {
+        var uid;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, getUidByOAuthid(payload.oAuthid)];
+                case 1:
+                    uid = _a.sent();
+                    if (!!uid) return [3 /*break*/, 3];
+                    return [4 /*yield*/, util_1.promisify(User.create)({
+                            username: payload.handle,
+                            email: payload.email,
+                        })];
+                case 2:
+                    uid = _a.sent();
+                    User.setUserField(uid, constants.name + "Id", payload.oAuthid);
+                    db.setObjectField(constants.name + "Id:uid", payload.oAuthid, uid);
+                    _a.label = 3;
+                case 3:
+                    if (!uid) {
+                        throw new Error('User login failed.');
+                    }
+                    return [2 /*return*/, { uid: uid }];
+            }
+        });
+    });
+}
+function getUidByOAuthid(oAuthid) {
+    return util_1.promisify(db.getUidByOAuthid)(constants.name + "Id:uid", oAuthid);
+}
+function getStrategy(strategies) {
+    return __awaiter(this, void 0, void 0, function () {
+        var passportOAuth, opt;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, Promise.resolve().then(function () { return __importStar(require('passport-oauth2')); })];
+                case 1:
+                    passportOAuth = _a.sent();
+                    opt = __assign({}, constants.oauth2, { callbackURL: nconf.get('url') + "/auth/" + constants.name + "/callback", passReqToCallback: true });
+                    passport.use(constants.name, new OAuth2Strategy(opt, util_1.callbackify(verifyFunctionWithRequest)));
+                    strategies.push({
+                        name: constants.name,
+                        url: "/auth/" + constants.name,
+                        callbackURL: "/auth/" + constants.name + "/callback",
+                        icon: 'fa-check-square',
+                        scope: [],
+                    });
+                    return [2 /*return*/, strategies];
+            }
+        });
+    });
+}
+function deleteUserData(user) {
+    return __awaiter(this, void 0, void 0, function () {
+        var oAuthIdDelete, err_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 3, , 4]);
+                    return [4 /*yield*/, util_1.promisify(User.getUserField)(user.uid, constants.name + "Id")];
+                case 1:
+                    oAuthIdDelete = _a.sent();
+                    return [4 /*yield*/, util_1.promisify(db.deleteObjectField)(constants.name + "Id:uid", oAuthIdDelete)];
+                case 2:
+                    _a.sent();
+                    return [3 /*break*/, 4];
+                case 3:
+                    err_1 = _a.sent();
+                    winston.error("[sso-oauth] Could not remove OAuthId data for uid " + user.uid + ". Error: " + err_1);
+                    throw err_1;
+                case 4: return [2 /*return*/, user];
+            }
+        });
+    });
+}
+module.exports = {
+    getStrategy: util_1.callbackify(getStrategy),
+    deleteUserData: util_1.callbackify(deleteUserData),
+};
