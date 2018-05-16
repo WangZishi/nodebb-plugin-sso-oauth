@@ -88,14 +88,15 @@ var constants = Object.freeze({
     userRoute: nconf.get('oauth2:userURL'),
 });
 function parseUser(data) {
+    // tslint:disable-next-line:no-unnecessary-local-variable
     var profile = {
         id: data.value.id,
         displayName: data.value.username,
-        emails: [],
+        emails: [{ value: data.value.email }],
     };
-    if (data.value.email) {
-        profile.emails.push({ value: data.value.email });
-    }
+    // if (data.value.email) {
+    //     profile.emails.push({ value: data.value.email });
+    // }
     return profile;
 }
 var OAuth2Strategy = /** @class */ (function (_super) {

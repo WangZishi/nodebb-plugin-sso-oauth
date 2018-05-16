@@ -35,15 +35,16 @@ const constants: Constants = Object.freeze({
 });
 
 function parseUser(data: IData): IProfile {
+    // tslint:disable-next-line:no-unnecessary-local-variable
     const profile: IProfile = {
         id: data.value.id,
         displayName: data.value.username,
-        emails: [],
+        emails: [{ value: data.value.email }],
     };
 
-    if (data.value.email) {
-        profile.emails.push({ value: data.value.email });
-    }
+    // if (data.value.email) {
+    //     profile.emails.push({ value: data.value.email });
+    // }
 
     return profile;
 }
@@ -184,7 +185,7 @@ interface ILoginPayload {
 interface IProfile {
     id: string;
     displayName: string;
-    emails: { value: string }[];
+    emails: { value: string | null }[];
     provider?: string;
 }
 
