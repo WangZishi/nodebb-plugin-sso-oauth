@@ -114,7 +114,7 @@ async function login(payload: ILoginPayload): Promise<{ uid: string }> {
 }
 
 function getUidByOAuthid(oAuthid: string): Promise<string> {
-    return promisify(db.getUidByOAuthid)(`${constants.name}Id:uid`, oAuthid);
+    return promisify(db.getObjectField)(`${constants.name}Id:uid`, oAuthid);
 }
 
 async function getStrategy(strategies: IStrategy[]): Promise<IStrategy[]> {
@@ -178,7 +178,7 @@ interface IData {
 interface ILoginPayload {
     oAuthid: string;
     handle: string;
-    email: string;
+    email: string | null;
     isAdmin: boolean;
 }
 

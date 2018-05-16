@@ -175,7 +175,7 @@ function login(payload) {
     });
 }
 function getUidByOAuthid(oAuthid) {
-    return util_1.promisify(db.getUidByOAuthid)(constants.name + "Id:uid", oAuthid);
+    return util_1.promisify(db.getObjectField)(constants.name + "Id:uid", oAuthid);
 }
 function getStrategy(strategies) {
     return __awaiter(this, void 0, void 0, function () {
