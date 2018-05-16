@@ -120,6 +120,8 @@ var OAuth2Strategy = /** @class */ (function (_super) {
                 done(e);
             }
         };
+        this._oauth2.setAuthMethod('Bearer');
+        this._oauth2.useAuthorizationHeaderforGET(true);
         // tslint:disable-next-line:prefer-type-cast no-any
         this._oauth2.get("constants.userRoute/" + id, accessToken, callback);
     };
