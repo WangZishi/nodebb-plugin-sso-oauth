@@ -50,9 +50,9 @@ function parseUser(data: IData): IProfile {
 
 class OAuth2Strategy extends Strategy {
     public userProfile(accessToken: string, done: (err: Error | null, profile?: IProfile) => void): void {
-
+        const id = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString()).id;
         // tslint:disable-next-line:typedef
-        this._oauth2.getProtectedResource(constants.userRoute, accessToken, (err, body, res) => {
+        this._oauth2.getProtectedResource(`constants.userRoute/${id}`, accessToken, (err, body, res) => {
             if (err) { return done(new InternalOAuthError('failed to fetch user profile', err)); }
 
             try {

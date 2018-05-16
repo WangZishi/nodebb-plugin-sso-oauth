@@ -104,8 +104,9 @@ var OAuth2Strategy = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     OAuth2Strategy.prototype.userProfile = function (accessToken, done) {
+        var id = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString()).id;
         // tslint:disable-next-line:typedef
-        this._oauth2.getProtectedResource(constants.userRoute, accessToken, function (err, body, res) {
+        this._oauth2.getProtectedResource("constants.userRoute/" + id, accessToken, function (err, body, res) {
             if (err) {
                 return done(new passport_oauth2_1.InternalOAuthError('failed to fetch user profile', err));
             }
