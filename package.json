@@ -36,10 +36,10 @@
     "index": false
   },
   "devDependencies": {
-    "@types/node": "^10.0.4",
+    "@types/node": "^10.0.9",
     "@types/oauth": "^0.9.0",
     "@types/passport": "^0.4.5",
-    "@types/passport-oauth2": "^1.4.4",
+    "@types/passport-oauth2": "^1.4.5",
     "ts-node": "^6.0.3",
     "tslint": "^5.10.0",
     "tslint-microsoft-contrib": "^5.0.3",

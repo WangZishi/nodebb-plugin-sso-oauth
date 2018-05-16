@@ -30,7 +30,7 @@ const constants: Constants = Object.freeze({
         clientID: nconf.get('oauth2:id'),
         clientSecret: nconf.get('oauth2:secret'),
     }),
-    userRoute: '',
+    userRoute: nconf.get('oauth2:userURL'),
 });
 
 function parseUser(data: IData): IProfile {
