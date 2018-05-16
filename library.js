@@ -149,17 +149,18 @@ function verifyFunctionWithRequest(req, toekn, secret, profile) {
 }
 function login(payload) {
     return __awaiter(this, void 0, void 0, function () {
-        var uid;
+        var uid, user;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getUidByOAuthid(payload.oAuthid)];
                 case 1:
                     uid = _a.sent();
                     if (!!uid) return [3 /*break*/, 3];
-                    return [4 /*yield*/, util_1.promisify(User.create)({
-                            username: payload.handle,
-                            email: payload.email,
-                        })];
+                    user = { username: payload.handle };
+                    if (payload.email) {
+                        user.email = payload.email;
+                    }
+                    return [4 /*yield*/, util_1.promisify(User.create)(user)];
                 case 2:
                     uid = _a.sent();
                     User.setUserField(uid, constants.name + "Id", payload.oAuthid);

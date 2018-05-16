@@ -99,10 +99,11 @@ async function login(payload: ILoginPayload): Promise<{ uid: string }> {
     let uid: string | null = await getUidByOAuthid(payload.oAuthid);
 
     if (!uid) {
-        uid = await promisify(User.create)({
-            username: payload.handle,
-            email: payload.email,
-        });
+        const user: { [x: string]: string } = { username: payload.handle };
+        if (payload.email) {
+            user.email = payload.email;
+        }
+        uid = await promisify(User.create)(user);
 
         User.setUserField(uid, `${constants.name}Id`, payload.oAuthid);
         db.setObjectField(`${constants.name}Id:uid`, payload.oAuthid, uid);
