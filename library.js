@@ -64,6 +64,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var passport_oauth2_1 = require("passport-oauth2");
+var url_1 = require("url");
 var util_1 = require("util");
 if (!module.parent) {
     throw new Error('Must use as a plugin.');
@@ -172,13 +173,15 @@ function getUidByOAuthid(oAuthid) {
 }
 function getStrategy(strategies) {
     return __awaiter(this, void 0, void 0, function () {
-        var passportOAuth, opt;
+        var passportOAuth, url, opt;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, Promise.resolve().then(function () { return __importStar(require('passport-oauth2')); })];
                 case 1:
                     passportOAuth = _a.sent();
-                    opt = __assign({}, constants.oauth2, { callbackURL: nconf.get('url') + "/auth/" + constants.name + "/callback", passReqToCallback: true });
+                    url = new url_1.URL(nconf.get('url') + "/auth/" + constants.name + "/callback");
+                    url.protocol = 'https:';
+                    opt = __assign({}, constants.oauth2, { callbackURL: url.href, passReqToCallback: true });
                     passport.use(constants.name, new OAuth2Strategy(opt, util_1.callbackify(verifyFunctionWithRequest)));
                     strategies.push({
                         name: constants.name,

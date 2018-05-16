@@ -9,6 +9,7 @@ import * as n from 'nconf';
 // tslint:disable-next-line:no-implicit-dependencies
 import * as p from 'passport';
 import { InternalOAuthError, Strategy, StrategyOptionsWithRequest } from 'passport-oauth2';
+import { URL } from 'url';
 import { callbackify, promisify } from 'util';
 
 if (!module.parent) { throw new Error('Must use as a plugin.'); }
@@ -112,9 +113,12 @@ function getUidByOAuthid(oAuthid: string): Promise<string> {
 
 async function getStrategy(strategies: IStrategy[]): Promise<IStrategy[]> {
     const passportOAuth = await import('passport-oauth2');
+    const url = new URL(`${nconf.get('url')}/auth/${constants.name}/callback`);
+    url.protocol = 'https:';
+
     const opt: StrategyOptionsWithRequest = {
         ...constants.oauth2,
-        callbackURL: `${nconf.get('url')}/auth/${constants.name}/callback`,
+        callbackURL: url.href,
         passReqToCallback: true,
     };
 
