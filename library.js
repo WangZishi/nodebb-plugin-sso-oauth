@@ -106,7 +106,7 @@ var OAuth2Strategy = /** @class */ (function (_super) {
     OAuth2Strategy.prototype.userProfile = function (accessToken, done) {
         var id = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString()).id;
         // tslint:disable-next-line:typedef
-        this._oauth2.getProtectedResource("constants.userRoute/" + id, accessToken, function (err, body, res) {
+        var callback = function (err, body, res) {
             if (err) {
                 return done(new passport_oauth2_1.InternalOAuthError('failed to fetch user profile', err));
             }
@@ -119,7 +119,9 @@ var OAuth2Strategy = /** @class */ (function (_super) {
             catch (e) {
                 done(e);
             }
-        });
+        };
+        // tslint:disable-next-line:prefer-type-cast no-any
+        this._oauth2.get("constants.userRoute/" + id, accessToken, callback);
     };
     return OAuth2Strategy;
 }(passport_oauth2_1.Strategy));
