@@ -72,7 +72,7 @@ class OAuth2Strategy extends Strategy {
         this._oauth2.useAuthorizationHeaderforGET(true);
 
         // tslint:disable-next-line:prefer-type-cast no-any
-        this._oauth2.get(`constants.userRoute/${id}`, accessToken, callback as any);
+        this._oauth2.get(`${constants.userRoute}/${id}`, accessToken, callback as any);
     }
 }
 

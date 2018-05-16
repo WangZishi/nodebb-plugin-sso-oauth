@@ -123,7 +123,7 @@ var OAuth2Strategy = /** @class */ (function (_super) {
         this._oauth2.setAuthMethod('Bearer');
         this._oauth2.useAuthorizationHeaderforGET(true);
         // tslint:disable-next-line:prefer-type-cast no-any
-        this._oauth2.get("constants.userRoute/" + id, accessToken, callback);
+        this._oauth2.get(constants.userRoute + "/" + id, accessToken, callback);
     };
     return OAuth2Strategy;
 }(passport_oauth2_1.Strategy));
