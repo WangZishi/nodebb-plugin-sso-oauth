@@ -1,7 +1,7 @@
 {
-	"id": "nodebb-plugin-sso-oauth",
-	"name": "NodeBB OAuth SSO",
-	"description": "NodeBB Plugin that allows users to login/register via any configured OAuth provider.",
+	"id": "nodebb-plugin-sso-oauth-sheencity",
+	"name": "NodeBB Sheencity OAuth SSO",
+	"description": "NodeBB Plugin that allows users to login/register Sheencity OAuth provider.",
 	"url": "https://github.com/julianlam/nodebb-plugin-sso-oauth",
 	"library": "./library.js",
 	"hooks": [
